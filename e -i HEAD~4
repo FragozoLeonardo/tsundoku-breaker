@@ -1,4 +1,0 @@
-[33m4f8faa1[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mfeat/setup-books-table[m[33m, [m[1;31morigin/feat/setup-books-table[m[33m)[m fix: correct rubocop config syntax and update to plugins
-[33ma630b42[m feat: implement Book model with validations, enums, rspec and rubocop config
-[33m1b95cac[m feat: setup postgres docker and create books table schema
-[33meee9a7c[m[33m ([m[1;31morigin/main[m[33m, [m[1;32mmain[m[33m)[m chore: initial project setup with rails 8 api and postgres

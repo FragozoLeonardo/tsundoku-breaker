@@ -9,15 +9,22 @@ RSpec.describe Book, type: :model do
     it { is_expected.to have_db_column(:title).of_type(:text).with_options(null: false) }
     it { is_expected.to have_db_column(:isbn).of_type(:string).with_options(null: false) }
     it { is_expected.to have_db_column(:status).of_type(:integer).with_options(default: :tsundoku, null: false) }
-
     it { is_expected.to have_db_index(:isbn).unique(true) }
     it { is_expected.to have_db_index(:status) }
   end
 
   describe "validations" do
     it { is_expected.to validate_presence_of(:title) }
-    it { is_expected.to validate_presence_of(:isbn) }
-    it { is_expected.to validate_uniqueness_of(:isbn).case_insensitive }
+
+    context "when validating isbn format" do
+      it { is_expected.to validate_presence_of(:isbn) }
+      it { is_expected.to validate_uniqueness_of(:isbn).case_insensitive }
+
+      it { is_expected.to allow_value("978-1234567890").for(:isbn) }
+      it { is_expected.to allow_value("1234567890").for(:isbn) }
+      it { is_expected.not_to allow_value("test-string").for(:isbn) }
+      it { is_expected.not_to allow_value("isbn-123").for(:isbn) }
+    end
 
     it "has a valid factory" do
       expect(book).to be_valid

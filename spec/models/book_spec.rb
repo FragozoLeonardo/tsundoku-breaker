@@ -20,7 +20,12 @@ RSpec.describe Book, type: :model do
       it { is_expected.to validate_presence_of(:isbn) }
       it { is_expected.to validate_uniqueness_of(:isbn).case_insensitive }
 
-      it { is_expected.to allow_value("978-1234567890").for(:isbn) }
+      it "accepts raw input with hyphens and normalizes it" do
+        book.isbn = "978-1234567890"
+        book.valid?
+        expect(book.isbn).to eq("9781234567890")
+      end
+
       it { is_expected.to allow_value("1234567890").for(:isbn) }
       it { is_expected.not_to allow_value("test-string").for(:isbn) }
       it { is_expected.not_to allow_value("isbn-123").for(:isbn) }

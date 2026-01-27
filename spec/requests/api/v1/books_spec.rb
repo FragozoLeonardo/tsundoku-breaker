@@ -6,13 +6,16 @@ RSpec.describe "Api::V1::Books", type: :request do
   describe "GET /api/v1/books" do
     subject(:get_books) { get api_v1_books_path }
 
-    let!(:book) { create(:book) }
+    let!(:book) do
+      create(:book, title: "  Clean Code  ", isbn: "978-0132350884")
+    end
+
     let(:expected_attributes) do
       {
         "id" => book.id,
-        "title" => book.title,
-        "isbn" => book.isbn,
-        "status" => book.status
+        "title" => "Clean Code",
+        "isbn" => "9780132350884",
+        "status" => "tsundoku"
       }
     end
 
@@ -28,7 +31,12 @@ RSpec.describe "Api::V1::Books", type: :request do
       expect(response.parsed_body.size).to eq(3)
     end
 
-    it "returns the correct book data matching the database" do
+    it "orders books by creation (newest first)" do
+      get_books
+      expect(response.parsed_body.first["id"]).to eq(Book.last.id)
+    end
+
+    it "returns normalized data" do
       get_books
       expect(response.parsed_body).to include(a_hash_including(expected_attributes))
     end

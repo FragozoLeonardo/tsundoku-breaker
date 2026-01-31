@@ -4,8 +4,6 @@ require "net/http"
 require "json"
 
 class GoogleBooksService
-  # Pattern: Result Object
-  # Retorna uma estrutura previsível: { success?, data, error }
   Result = Struct.new(:success?, :data, :error, keyword_init: true)
 
   BASE_URL = "https://www.googleapis.com/books/v1/volumes"
@@ -22,8 +20,6 @@ class GoogleBooksService
     response = fetch_from_google
     parse_response(response)
   rescue StandardError
-    # Resiliência: Em caso de falha catastrófica de rede (DNS, Timeout),
-    # retornamos um erro controlado em vez de explodir a aplicação.
     Result.new(success?: false, error: :api_error)
   end
 
@@ -32,28 +28,37 @@ class GoogleBooksService
   attr_reader :isbn
 
   def fetch_from_google
-    uri = URI("#{BASE_URL}?q=isbn:#{isbn}")
+    api_key = ENV.fetch("GOOGLE_BOOKS_API_KEY", nil)
+
+    query_params = {
+      q: "isbn:#{isbn}",
+      key: api_key
+    }.compact
+
+    uri = URI(BASE_URL)
+    uri.query = URI.encode_www_form(query_params)
+
     Net::HTTP.get_response(uri)
   end
 
   def parse_response(response)
-    # Garante que a resposta foi 2xx (Sucesso)
     return Result.new(success?: false, error: :api_error) unless response.is_a?(Net::HTTPSuccess)
 
     body = JSON.parse(response.body)
     items = body["items"]
 
-    # Se a lista de livros vier vazia ou nula
     return Result.new(success?: false, error: :book_not_found) if items.blank?
 
     book_info = items.first["volumeInfo"]
 
-    # Mapeamento dos dados
+    authors_array = book_info["authors"]
+    author_string = authors_array&.join(", ")
+
     Result.new(
       success?: true,
       data: {
         title: book_info["title"],
-        authors: book_info["authors"],
+        author: author_string,
         description: book_info["description"],
         remote_cover_url: book_info.dig("imageLinks", "thumbnail")
       },

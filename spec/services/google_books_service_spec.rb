@@ -8,6 +8,11 @@ RSpec.describe GoogleBooksService do
 
     let(:isbn) { "9780132350884" }
     let(:base_url) { "https://www.googleapis.com/books/v1/volumes" }
+    let(:fake_api_key) { "TEST_API_KEY" }
+
+    before do
+      allow(ENV).to receive(:fetch).with("GOOGLE_BOOKS_API_KEY", nil).and_return(fake_api_key)
+    end
 
     context "when the API returns data successfully" do
       let(:google_response) do
@@ -17,7 +22,8 @@ RSpec.describe GoogleBooksService do
               volumeInfo: {
                 title: "Clean Code",
                 authors: ["Robert C. Martin"],
-                description: "Best book ever."
+                description: "Best book ever.",
+                imageLinks: { thumbnail: "http://cover.jpg" }
               }
             }
           ]
@@ -25,16 +31,17 @@ RSpec.describe GoogleBooksService do
       end
 
       before do
-        stub_request(:get, "#{base_url}?q=isbn:#{isbn}")
+        stub_request(:get, base_url)
+          .with(query: { q: "isbn:#{isbn}", key: fake_api_key })
           .to_return(status: 200, body: google_response, headers: { "Content-Type" => "application/json" })
       end
 
-      it "returns a success result with book data" do
+      it "returns a success result with book data formatted for DB" do
         result = service_call
 
         expect(result).to be_success
         expect(result.data[:title]).to eq("Clean Code")
-        expect(result.data[:authors]).to eq(["Robert C. Martin"])
+        expect(result.data[:author]).to eq("Robert C. Martin")
       end
     end
 
@@ -42,8 +49,9 @@ RSpec.describe GoogleBooksService do
       let(:empty_response) { { totalItems: 0, items: [] }.to_json }
 
       before do
-        stub_request(:get, "#{base_url}?q=isbn:#{isbn}")
-          .to_return(status: 200, body: empty_response)
+        stub_request(:get, base_url)
+          .with(query: { q: "isbn:#{isbn}", key: fake_api_key })
+          .to_return(status: 200, body: empty_response, headers: { "Content-Type" => "application/json" })
       end
 
       it "returns a failure result" do
@@ -55,7 +63,8 @@ RSpec.describe GoogleBooksService do
 
     context "when the API request fails (500)" do
       before do
-        stub_request(:get, "#{base_url}?q=isbn:#{isbn}")
+        stub_request(:get, base_url)
+          .with(query: { q: "isbn:#{isbn}", key: fake_api_key })
           .to_return(status: 500)
       end
 

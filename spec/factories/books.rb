@@ -3,8 +3,7 @@
 FactoryBot.define do
   factory :book do
     title { Faker::Book.title }
-    sequence(:isbn) { |n| "978#{format('%010d', n)}" }
-    status { :tsundoku }
+    sequence(:isbn) { |n| "9780132350#{format('%03d', n)}" }
 
     trait :reading do
       status { :reading }

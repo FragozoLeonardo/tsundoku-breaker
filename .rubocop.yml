@@ -7,20 +7,30 @@ AllCops:
   NewCops: enable
   SuggestExtensions: false
   Exclude:
-    - 'db/schema.rb'
-    - 'db/queue_schema.rb'
-    - 'db/cache_schema.rb'
-    - 'db/cable_schema.rb'
-    - 'bin/**/*'
-    - 'node_modules/**/*'
-    - 'vendor/**/*'
-    - 'config/initializers/**/*'
+    - "db/schema.rb"
+    - "db/queue_schema.rb"
+    - "db/cache_schema.rb"
+    - "db/cable_schema.rb"
+    - "bin/**/*"
+    - "node_modules/**/*"
+    - "vendor/**/*"
+    - "config/initializers/**/*"
 
 Style/Documentation:
   Enabled: false
 
 Style/StringLiterals:
   EnforcedStyle: double_quotes
+
+Metrics/BlockLength:
+  Exclude:
+    - "spec/**/*"
+
+RSpec/MultipleExpectations:
+  Enabled: false
+
+RSpec/ExampleLength:
+  Enabled: false
 
 RSpec/ExpectActual:
   Enabled: true

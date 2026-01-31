@@ -8,22 +8,36 @@ RSpec.describe Book, type: :model do
   describe "database schema" do
     it { is_expected.to have_db_column(:title).of_type(:text).with_options(null: false) }
     it { is_expected.to have_db_column(:isbn).of_type(:string).with_options(null: false) }
-    it { is_expected.to have_db_column(:status).of_type(:integer).with_options(default: :tsundoku, null: false) }
+    it { is_expected.to have_db_column(:status).of_type(:integer).with_options(null: false) }
+    it { is_expected.to have_db_column(:author).of_type(:string) }
+    it { is_expected.to have_db_column(:description).of_type(:text) }
+    it { is_expected.to have_db_column(:cover_url).of_type(:string) }
+
+    it "defaults status to tsundoku" do
+      book = described_class.new
+      expect(book.status).to eq("tsundoku")
+    end
+
     it { is_expected.to have_db_index(:isbn).unique(true) }
     it { is_expected.to have_db_index(:status) }
   end
 
   describe "validations" do
     it { is_expected.to validate_presence_of(:title) }
+    it { is_expected.to validate_presence_of(:isbn) }
+    it { is_expected.to validate_uniqueness_of(:isbn).case_insensitive }
 
-    context "when validating isbn format" do
-      it { is_expected.to validate_presence_of(:isbn) }
-      it { is_expected.to validate_uniqueness_of(:isbn).case_insensitive }
-
-      it "accepts raw input with hyphens and normalizes it" do
+    context "when validating normalization and format" do
+      it "removes hyphens from isbn before validation" do
         book.isbn = "978-1234567890"
         book.valid?
         expect(book.isbn).to eq("9781234567890")
+      end
+
+      it "strips whitespace from title" do
+        book.title = "  Clean Code  "
+        book.valid?
+        expect(book.title).to eq("Clean Code")
       end
 
       it { is_expected.to allow_value("1234567890").for(:isbn) }
@@ -43,7 +57,10 @@ RSpec.describe Book, type: :model do
   end
 
   describe "enums" do
-    it { is_expected.to define_enum_for(:status).with_values(tsundoku: 0, reading: 1, finished: 2) }
+    it do
+      expect(book).to define_enum_for(:status)
+        .with_values(tsundoku: 0, reading: 1, finished: 2)
+    end
 
     it "allows switching status to reading via trait" do
       expect(build(:book, :reading)).to be_reading

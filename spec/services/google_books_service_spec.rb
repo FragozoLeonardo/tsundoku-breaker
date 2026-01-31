@@ -7,11 +7,13 @@ RSpec.describe GoogleBooksService do
     subject(:service_call) { described_class.call(isbn) }
 
     let(:isbn) { "9780132350884" }
-    let(:base_url) { "https://www.googleapis.com/books/v1/volumes" }
+    let(:base_url) { GoogleBooksService::BASE_URL }
     let(:fake_api_key) { "TEST_API_KEY" }
 
     before do
-      allow(ENV).to receive(:fetch).with("GOOGLE_BOOKS_API_KEY", nil).and_return(fake_api_key)
+      allow(ENV).to receive(:fetch)
+        .with("GOOGLE_BOOKS_API_KEY", nil)
+        .and_return(fake_api_key)
     end
 
     context "when the API returns data successfully" do
@@ -33,15 +35,23 @@ RSpec.describe GoogleBooksService do
       before do
         stub_request(:get, base_url)
           .with(query: { q: "isbn:#{isbn}", key: fake_api_key })
-          .to_return(status: 200, body: google_response, headers: { "Content-Type" => "application/json" })
+          .to_return(
+            status: 200,
+            body: google_response,
+            headers: { "Content-Type" => "application/json" }
+          )
       end
 
-      it "returns a success result with book data formatted for DB" do
+      it "returns a success result with formatted book data" do
         result = service_call
 
         expect(result).to be_success
-        expect(result.data[:title]).to eq("Clean Code")
-        expect(result.data[:author]).to eq("Robert C. Martin")
+        expect(result.data).to include(
+          title: "Clean Code",
+          author: "Robert C. Martin",
+          description: "Best book ever.",
+          remote_cover_url: "http://cover.jpg"
+        )
       end
     end
 
@@ -51,25 +61,46 @@ RSpec.describe GoogleBooksService do
       before do
         stub_request(:get, base_url)
           .with(query: { q: "isbn:#{isbn}", key: fake_api_key })
-          .to_return(status: 200, body: empty_response, headers: { "Content-Type" => "application/json" })
+          .to_return(
+            status: 200,
+            body: empty_response,
+            headers: { "Content-Type" => "application/json" }
+          )
       end
 
-      it "returns a failure result" do
+      it "returns a failure result with book_not_found error" do
         result = service_call
+
         expect(result).not_to be_success
         expect(result.error).to eq(:book_not_found)
       end
     end
 
-    context "when the API request fails (500)" do
+    context "when the API returns a server error" do
       before do
         stub_request(:get, base_url)
           .with(query: { q: "isbn:#{isbn}", key: fake_api_key })
           .to_return(status: 500)
       end
 
-      it "returns a failure result with connection error" do
+      it "returns a failure result with api_error" do
         result = service_call
+
+        expect(result).not_to be_success
+        expect(result.error).to eq(:api_error)
+      end
+    end
+
+    context "when the response body is invalid JSON" do
+      before do
+        stub_request(:get, base_url)
+          .with(query: { q: "isbn:#{isbn}", key: fake_api_key })
+          .to_return(status: 200, body: "INVALID_JSON")
+      end
+
+      it "returns a failure result with api_error" do
+        result = service_call
+
         expect(result).not_to be_success
         expect(result.error).to eq(:api_error)
       end

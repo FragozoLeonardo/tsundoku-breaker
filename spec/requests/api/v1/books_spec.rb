@@ -36,4 +36,79 @@ RSpec.describe "Api::V1::Books", type: :request do
       )
     end
   end
+
+  describe "POST /api/v1/books" do
+    subject(:request) { post api_v1_books_path, params: { book: { isbn: isbn } } }
+
+    let(:isbn) { "9780132350884" }
+    let(:service_result) { GoogleBooksService::Result.new(success?: true, data: book_data, error: nil) }
+    let(:book_data) do
+      {
+        title: "Clean Code",
+        author: "Robert C. Martin",
+        description: "A handbook of agile software craftsmanship",
+        cover_url: "http://example.com/cover.jpg"
+      }
+    end
+
+    before do
+      allow(GoogleBooksService).to receive(:call).with(isbn).and_return(service_result)
+    end
+
+    context "when the book is found and valid" do
+      it "creates a new book" do
+        expect { request }.to change(Book, :count).by(1)
+      end
+
+      it "returns http created" do
+        request
+        expect(response).to have_http_status(:created)
+      end
+
+      it "returns the created book attributes" do
+        request
+        expect(response.parsed_body).to include(
+          "title" => "Clean Code",
+          "isbn" => "9780132350884",
+          "author" => "Robert C. Martin"
+        )
+      end
+    end
+
+    context "when the book already exists" do
+      before { create(:book, isbn: isbn) }
+
+      it "does not create a new book" do
+        expect { request }.not_to change(Book, :count)
+      end
+
+      it "returns unprocessable content" do
+        request
+        expect(response).to have_http_status(:unprocessable_content)
+      end
+
+      it "returns error messages" do
+        request
+        expect(response.parsed_body["errors"]).to include("isbn")
+      end
+    end
+
+    context "when the book is not found in Google Books" do
+      let(:service_result) { GoogleBooksService::Result.new(success?: false, error: :book_not_found) }
+
+      it "returns not found" do
+        request
+        expect(response).to have_http_status(:not_found)
+      end
+    end
+
+    context "when the external service fails" do
+      let(:service_result) { GoogleBooksService::Result.new(success?: false, error: :api_error) }
+
+      it "returns service unavailable" do
+        request
+        expect(response).to have_http_status(:service_unavailable)
+      end
+    end
+  end
 end

@@ -50,7 +50,7 @@ RSpec.describe GoogleBooksService do
           title: "Clean Code",
           author: "Robert C. Martin",
           description: "Best book ever.",
-          remote_cover_url: "http://cover.jpg"
+          cover_url: "http://cover.jpg"
         )
       end
     end

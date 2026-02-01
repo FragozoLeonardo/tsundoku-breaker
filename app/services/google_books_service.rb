@@ -8,12 +8,6 @@ class GoogleBooksService
 
   BASE_URL = "https://www.googleapis.com/books/v1/volumes"
 
-  API_ERRORS = [
-    Net::OpenTimeout,
-    Timeout::Error,
-    JSON::ParserError
-  ].freeze
-
   def self.call(isbn)
     new(isbn).perform
   end
@@ -25,11 +19,9 @@ class GoogleBooksService
   def perform
     response = fetch_from_google
     parse_response(response)
-  rescue JSON::ParserError
-    Result.new(success?: false, error: :api_error)
   rescue StandardError => e
-    Rails.logger.error("GoogleBooksService Error: #{e.message}")
-    Result.new(success?: false, error: :api_error)
+    log_error(e)
+    api_error_result
   end
 
   private
@@ -40,12 +32,12 @@ class GoogleBooksService
     uri = URI(BASE_URL)
     uri.query = URI.encode_www_form(query_params)
 
-    http_client.get_response(uri)
+    Net::HTTP.get_response(uri)
   end
 
   def query_params
     {
-      q: "isbn:#{isbn}",
+      q: "isbn:#{@isbn}", # <--- AQUI ESTAVA O ERRO (Adicionei o @)
       key: api_key
     }.compact
   end
@@ -54,26 +46,15 @@ class GoogleBooksService
     ENV.fetch("GOOGLE_BOOKS_API_KEY", nil)
   end
 
-  def http_client
-    Net::HTTP
-  end
-
   def parse_response(response)
-    return api_error_result unless successful_response?(response)
+    return api_error_result unless response.is_a?(Net::HTTPSuccess)
 
-    items = extract_items(response.body)
-    return book_not_found_result if items.empty?
+    body = JSON.parse(response.body)
+    items = body["items"]
+
+    return book_not_found_result if items.blank?
 
     build_success_result(items.first["volumeInfo"])
-  end
-
-  def successful_response?(response)
-    response.is_a?(Net::HTTPSuccess)
-  end
-
-  def extract_items(body)
-    parsed = JSON.parse(body)
-    Array(parsed["items"])
   end
 
   def build_success_result(book_info)
@@ -83,7 +64,7 @@ class GoogleBooksService
         title: book_info["title"],
         author: Array(book_info["authors"]).join(", "),
         description: book_info["description"],
-        remote_cover_url: book_info.dig("imageLinks", "thumbnail")
+        cover_url: book_info.dig("imageLinks", "thumbnail")
       },
       error: nil
     )
@@ -98,10 +79,6 @@ class GoogleBooksService
   end
 
   def log_error(error)
-    return unless defined?(Rails)
-
-    Rails.logger.error(
-      "[GoogleBooksService] #{error.class}: #{error.message}"
-    )
+    Rails.logger.error("[GoogleBooksService] #{error.class}: #{error.message}")
   end
 end

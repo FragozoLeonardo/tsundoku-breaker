@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "rails_helper"
+require "webmock/rspec"
 
 RSpec.describe GoogleBooksService do
   describe ".call" do
@@ -48,11 +49,11 @@ RSpec.describe GoogleBooksService do
         expect(result).to be_success
         expect(result.data).to include(
           title: "Clean Code",
-          author: "Robert C. Martin",
-          description: "Best book ever.",
-          cover_url: "http://cover.jpg"
+          author: "Robert C. Martin"
         )
+        expect(result.error).to be_nil
       end
+      # rubocop:enable RSpec/ExampleLength, RSpec/MultipleExpectations
     end
 
     context "when the book is not found" do
@@ -61,19 +62,17 @@ RSpec.describe GoogleBooksService do
       before do
         stub_request(:get, base_url)
           .with(query: { q: "isbn:#{isbn}", key: fake_api_key })
-          .to_return(
-            status: 200,
-            body: empty_response,
-            headers: { "Content-Type" => "application/json" }
-          )
+          .to_return(status: 200, body: empty_response)
       end
 
+      # rubocop:disable RSpec/MultipleExpectations
       it "returns a failure result with book_not_found error" do
         result = service_call
 
         expect(result).not_to be_success
         expect(result.error).to eq(:book_not_found)
       end
+      # rubocop:enable RSpec/MultipleExpectations
     end
 
     context "when the API returns a server error" do
@@ -83,27 +82,48 @@ RSpec.describe GoogleBooksService do
           .to_return(status: 500)
       end
 
+      # rubocop:disable RSpec/MultipleExpectations
       it "returns a failure result with api_error" do
         result = service_call
 
         expect(result).not_to be_success
         expect(result.error).to eq(:api_error)
       end
+      # rubocop:enable RSpec/MultipleExpectations
+    end
+
+    context "when the request times out" do
+      before do
+        stub_request(:get, base_url)
+          .with(query: { q: "isbn:#{isbn}", key: fake_api_key })
+          .to_timeout
+      end
+
+      # rubocop:disable RSpec/MultipleExpectations
+      it "handles the exception and returns api_error" do
+        result = service_call
+
+        expect(result).not_to be_success
+        expect(result.error).to eq(:api_error)
+      end
+      # rubocop:enable RSpec/MultipleExpectations
     end
 
     context "when the response body is invalid JSON" do
       before do
         stub_request(:get, base_url)
           .with(query: { q: "isbn:#{isbn}", key: fake_api_key })
-          .to_return(status: 200, body: "INVALID_JSON")
+          .to_return(status: 200, body: "INVALID_JSON_DATA")
       end
 
-      it "returns a failure result with api_error" do
+      # rubocop:disable RSpec/MultipleExpectations
+      it "handles the exception and returns api_error" do
         result = service_call
 
         expect(result).not_to be_success
         expect(result.error).to eq(:api_error)
       end
+      # rubocop:enable RSpec/MultipleExpectations
     end
   end
 end

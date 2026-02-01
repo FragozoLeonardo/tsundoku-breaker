@@ -8,6 +8,12 @@ class GoogleBooksService
 
   BASE_URL = "https://www.googleapis.com/books/v1/volumes"
 
+  NETWORK_ERRORS = [
+    Net::OpenTimeout, Net::ReadTimeout, Net::WriteTimeout,
+    Errno::ECONNRESET, Errno::ECONNREFUSED, SocketError,
+    OpenSSL::SSL::SSLError
+  ].freeze
+
   def self.call(isbn)
     new(isbn).perform
   end
@@ -19,8 +25,11 @@ class GoogleBooksService
   def perform
     response = fetch_from_google
     parse_response(response)
-  rescue StandardError => e
-    log_error(e)
+  rescue JSON::ParserError => e
+    log_error("Invalid JSON received from Google", e)
+    api_error_result
+  rescue *NETWORK_ERRORS => e
+    log_error("Network connection failed", e)
     api_error_result
   end
 
@@ -78,7 +87,7 @@ class GoogleBooksService
     Result.new(success?: false, error: :book_not_found)
   end
 
-  def log_error(error)
-    Rails.logger.error("[GoogleBooksService] #{error.class}: #{error.message}")
+  def log_error(msg, error)
+    Rails.logger.error("[GoogleBooksService] #{msg}: #{error.class} - #{error.message}")
   end
 end

@@ -37,7 +37,7 @@ class GoogleBooksService
 
   def query_params
     {
-      q: "isbn:#{@isbn}", # <--- AQUI ESTAVA O ERRO (Adicionei o @)
+      q: "isbn:#{@isbn}",
       key: api_key
     }.compact
   end

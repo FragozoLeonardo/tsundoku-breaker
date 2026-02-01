@@ -50,6 +50,8 @@ group :development, :test do
   # Omakase Ruby styling [https://github.com/rails/rubocop-rails-omakase/]
   gem "rubocop-rails-omakase", require: false
 
+  gem "dotenv-rails", groups: %i[development test]
+
   # Testing
   gem "factory_bot_rails"
   gem "faker", require: false
@@ -59,4 +61,5 @@ group :development, :test do
   gem "rubocop-rails", require: false
   gem "rubocop-rspec", require: false
   gem "shoulda-matchers"
+  gem "webmock"
 end

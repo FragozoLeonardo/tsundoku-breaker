@@ -14,4 +14,7 @@ RSpec.configure do |config|
   config.disable_monkey_patching!
   config.order = :random
   Kernel.srand config.seed
+
+  require "webmock/rspec"
+  WebMock.disable_net_connect!(allow_localhost: true)
 end

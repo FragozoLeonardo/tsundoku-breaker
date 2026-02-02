@@ -2,8 +2,12 @@
 
 FactoryBot.define do
   factory :book do
-    title { Faker::Book.title }
-    sequence(:isbn) { |n| "9780132350#{format('%03d', n)}" }
+    sequence(:title) { |n| "Book Title #{n}" }
+    author { "Author Name" }
+    sequence(:isbn) { |n| "978#{n.to_s.rjust(10, '0')}" }
+    description { "A description of the book." }
+    cover_url { "http://books.google.com/cover.jpg" }
+    status { :tsundoku }
 
     trait :reading do
       status { :reading }
@@ -11,6 +15,10 @@ FactoryBot.define do
 
     trait :finished do
       status { :finished }
+    end
+
+    trait :abandoned do
+      status { :abandoned }
     end
 
     trait :invalid do

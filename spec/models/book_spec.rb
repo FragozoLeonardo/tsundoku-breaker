@@ -59,7 +59,7 @@ RSpec.describe Book, type: :model do
   describe "enums" do
     it do
       expect(book).to define_enum_for(:status)
-        .with_values(tsundoku: 0, reading: 1, finished: 2)
+        .with_values(tsundoku: 0, reading: 1, finished: 2, abandoned: 3)
     end
 
     it "allows switching status to reading via trait" do
@@ -68,6 +68,10 @@ RSpec.describe Book, type: :model do
 
     it "allows switching status to finished via trait" do
       expect(build(:book, :finished)).to be_finished
+    end
+
+    it "allows switching status to abandoned via trait" do
+      expect(build(:book, :abandoned)).to be_abandoned
     end
   end
 end

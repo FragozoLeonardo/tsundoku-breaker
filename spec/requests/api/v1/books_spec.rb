@@ -6,11 +6,13 @@ RSpec.describe "Api::V1::Books", type: :request do
   describe "GET /api/v1/books" do
     subject(:request) { get api_v1_books_path }
 
-    let!(:oldest_book) { create(:book, created_at: 2.days.ago) }
-    let!(:middle_book) { create(:book, created_at: 1.day.ago) }
     let!(:newest_book) { create(:book, created_at: Time.current) }
 
-    before { request }
+    before do
+      create(:book, created_at: 2.days.ago)
+      create(:book, created_at: 1.day.ago)
+      request
+    end
 
     it "returns http success" do
       expect(response).to have_http_status(:ok)

@@ -3,13 +3,25 @@
 module Api
   module V1
     class BooksController < ApplicationController
+      rescue_from ActiveRecord::RecordNotFound do
+        render json: { error: "Book not found" }, status: :not_found
+      end
+
+      rescue_from ActionController::ParameterMissing do
+        render json: { error: "Parameter missing" }, status: :bad_request
+      end
+
+      rescue_from ArgumentError do |e|
+        render json: { error: e.message }, status: :unprocessable_content
+      end
+
       def index
         books = Book.order(created_at: :desc)
         render json: books
       end
 
       def create
-        isbn = book_params[:isbn]
+        isbn = create_params[:isbn]
         result = GoogleBooksService.call(isbn)
 
         if result.success?
@@ -19,10 +31,23 @@ module Api
         end
       end
 
+      def update
+        book = Book.find(params[:id])
+        if book.update(update_params)
+          render json: book
+        else
+          render json: { errors: book.errors }, status: :unprocessable_content
+        end
+      end
+
       private
 
-      def book_params
-        params.expect(book: [:isbn])
+      def create_params
+        params.expect(book: %i[isbn])
+      end
+
+      def update_params
+        params.expect(book: %i[status title author description cover_url])
       end
 
       def create_book_from(book_data, isbn)

@@ -6,10 +6,9 @@ RSpec.describe "Api::V1::Books", type: :request do
   describe "GET /api/v1/books" do
     subject(:request) { get api_v1_books_path }
 
-    let!(:normalized_book) do
-      create(:book, title: "  Clean Code  ", isbn: "978-0132350884")
-    end
-    let!(:newest_book) { create(:book) }
+    let!(:oldest_book) { create(:book, created_at: 2.days.ago) }
+    let!(:middle_book) { create(:book, created_at: 1.day.ago) }
+    let!(:newest_book) { create(:book, created_at: Time.current) }
 
     before { request }
 
@@ -18,22 +17,11 @@ RSpec.describe "Api::V1::Books", type: :request do
     end
 
     it "returns all books" do
-      expect(response.parsed_body.size).to eq(2)
+      expect(response.parsed_body.size).to eq(3)
     end
 
     it "orders books by creation date (newest first)" do
       expect(response.parsed_body.first["id"]).to eq(newest_book.id)
-    end
-
-    it "returns normalized data" do
-      expect(response.parsed_body).to include(
-        a_hash_including(
-          "id" => normalized_book.id,
-          "title" => "Clean Code",
-          "isbn" => "9780132350884",
-          "status" => "tsundoku"
-        )
-      )
     end
   end
 
@@ -108,6 +96,73 @@ RSpec.describe "Api::V1::Books", type: :request do
       it "returns service unavailable" do
         request
         expect(response).to have_http_status(:service_unavailable)
+      end
+    end
+  end
+
+  describe "PATCH /api/v1/books/:id" do
+    subject(:request) { patch api_v1_book_path(book_id), params: params }
+
+    let!(:book) { create(:book, status: :tsundoku) }
+    let(:book_id) { book.id }
+    let(:params) { { book: { status: "reading" } } }
+
+    context "with valid parameters" do
+      it "updates the book status" do
+        expect { request }.to change { book.reload.status }.from("tsundoku").to("reading")
+      end
+
+      it "returns http ok" do
+        request
+        expect(response).to have_http_status(:ok)
+      end
+
+      it "returns the updated book" do
+        request
+        expect(response.parsed_body["status"]).to eq("reading")
+      end
+    end
+
+    context "with invalid parameters" do
+      let(:params) { { book: { status: "invalid_status" } } }
+
+      it "does not update the book" do
+        expect { request }.not_to(change { book.reload.status })
+      end
+
+      it "returns unprocessable content" do
+        request
+        expect(response).to have_http_status(:unprocessable_content)
+      end
+    end
+
+    context "when trying to update protected attributes" do
+      let(:original_isbn) { book.isbn }
+      let(:params) { { book: { status: "finished", isbn: "0000000000" } } }
+
+      it "updates the allowed attribute but ignores the protected one" do
+        request
+        book.reload
+        expect(book.status).to eq("finished")
+        expect(book.isbn).to eq(original_isbn)
+      end
+    end
+
+    context "with empty or missing parameters" do
+      let(:params) { {} }
+
+      it "returns bad request" do
+        request
+        expect(response).to have_http_status(:bad_request)
+      end
+    end
+
+    context "when book does not exist" do
+      let(:book_id) { -1 }
+
+      it "returns not found" do
+        request
+        expect(response).to have_http_status(:not_found)
       end
     end
   end

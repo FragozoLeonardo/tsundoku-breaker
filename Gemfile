@@ -52,6 +52,8 @@ group :development, :test do
 
   gem "dotenv-rails", groups: %i[development test]
 
+  gem "sidekiq"
+
   # Testing
   gem "factory_bot_rails"
   gem "faker", require: false

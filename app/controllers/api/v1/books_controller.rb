@@ -21,18 +21,24 @@ module Api
       end
 
       def create
-        isbn = create_params[:isbn]
-        result = GoogleBooksService.call(isbn)
+        book = Book.new(isbn: create_params[:isbn], status: :processing)
 
-        if result.success?
-          create_book_from(result.data, isbn)
+        if book.save
+          DownloadBookMetadataJob.perform_later(book.id)
+          render json: book, status: :accepted
         else
-          handle_service_error(result.error)
+          render json: { errors: book.errors }, status: :unprocessable_content
         end
       end
 
       def update
         book = Book.find(params[:id])
+
+        if book.processing?
+          return render json: { error: "Book is still being processed and cannot be updated" },
+                        status: :unprocessable_content
+        end
+
         if book.update(update_params)
           render json: book
         else

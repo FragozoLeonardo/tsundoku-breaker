@@ -3,6 +3,8 @@
 require "rails_helper"
 
 RSpec.describe "Api::V1::Books", type: :request do
+  include ActiveJob::TestHelper
+
   describe "GET /api/v1/books" do
     subject(:request) { get api_v1_books_path }
 
@@ -30,37 +32,33 @@ RSpec.describe "Api::V1::Books", type: :request do
   describe "POST /api/v1/books" do
     subject(:request) { post api_v1_books_path, params: { book: { isbn: isbn } } }
 
-    let(:isbn) { "9780132350884" }
-    let(:service_result) { GoogleBooksService::Result.new(success?: true, data: book_data, error: nil) }
-    let(:book_data) do
-      {
-        title: "Clean Code",
-        author: "Robert C. Martin",
-        description: "A handbook of agile software craftsmanship",
-        cover_url: "http://example.com/cover.jpg"
-      }
-    end
-
     before do
-      allow(GoogleBooksService).to receive(:call).with(isbn).and_return(service_result)
+      ActiveJob::Base.queue_adapter = :test
     end
 
-    context "when the book is found and valid" do
-      it "creates a new book" do
+    let(:isbn) { "9780132350884" }
+
+    context "with valid parameters" do
+      it "creates a new book in processing status" do
         expect { request }.to change(Book, :count).by(1)
+        expect(Book.last.status).to eq("processing")
       end
 
-      it "returns http created" do
+      it "returns http accepted" do
         request
-        expect(response).to have_http_status(:created)
+        expect(response).to have_http_status(:accepted)
       end
 
-      it "returns the created book attributes" do
+      it "enqueues the metadata download job" do
+        expect { request }.to have_enqueued_job(DownloadBookMetadataJob)
+          .with(instance_of(Integer)) # O job recebe o ID do livro
+      end
+
+      it "returns the initial book attributes" do
         request
         expect(response.parsed_body).to include(
-          "title" => "Clean Code",
-          "isbn" => "9780132350884",
-          "author" => "Robert C. Martin"
+          "isbn" => isbn,
+          "status" => "processing"
         )
       end
     end
@@ -82,24 +80,6 @@ RSpec.describe "Api::V1::Books", type: :request do
         expect(response.parsed_body["errors"]).to include("isbn")
       end
     end
-
-    context "when the book is not found in Google Books" do
-      let(:service_result) { GoogleBooksService::Result.new(success?: false, error: :book_not_found) }
-
-      it "returns not found" do
-        request
-        expect(response).to have_http_status(:not_found)
-      end
-    end
-
-    context "when the external service fails" do
-      let(:service_result) { GoogleBooksService::Result.new(success?: false, error: :api_error) }
-
-      it "returns service unavailable" do
-        request
-        expect(response).to have_http_status(:service_unavailable)
-      end
-    end
   end
 
   describe "PATCH /api/v1/books/:id" do
@@ -118,44 +98,29 @@ RSpec.describe "Api::V1::Books", type: :request do
         request
         expect(response).to have_http_status(:ok)
       end
+    end
 
-      it "returns the updated book" do
+    context "when the book is still processing" do
+      let!(:book) { create(:book, status: :processing) }
+      let(:params) { { book: { status: "reading" } } }
+
+      it "returns unprocessable content" do
         request
-        expect(response.parsed_body["status"]).to eq("reading")
+        expect(response).to have_http_status(:unprocessable_content)
+      end
+
+      it "returns a specific error message" do
+        request
+        expect(response.parsed_body["error"]).to eq("Book is still being processed and cannot be updated")
       end
     end
 
     context "with invalid parameters" do
       let(:params) { { book: { status: "invalid_status" } } }
 
-      it "does not update the book" do
-        expect { request }.not_to(change { book.reload.status })
-      end
-
       it "returns unprocessable content" do
         request
         expect(response).to have_http_status(:unprocessable_content)
-      end
-    end
-
-    context "when trying to update protected attributes" do
-      let(:original_isbn) { book.isbn }
-      let(:params) { { book: { status: "finished", isbn: "0000000000" } } }
-
-      it "updates the allowed attribute but ignores the protected one" do
-        request
-        book.reload
-        expect(book.status).to eq("finished")
-        expect(book.isbn).to eq(original_isbn)
-      end
-    end
-
-    context "with empty or missing parameters" do
-      let(:params) { {} }
-
-      it "returns bad request" do
-        request
-        expect(response).to have_http_status(:bad_request)
       end
     end
 

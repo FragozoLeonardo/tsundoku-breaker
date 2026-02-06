@@ -24,5 +24,9 @@ FactoryBot.define do
     trait :invalid do
       title { nil }
     end
+
+    trait :processing do
+      status { :processing }
+    end
   end
 end

@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
 class Book < ApplicationRecord
-  enum :status, { tsundoku: 0, reading: 1, finished: 2, abandoned: 3 }
+  enum :status, { processing: 0, tsundoku: 1, reading: 2, finished: 3, abandoned: 4 }
 
   normalizes :title, with: ->(value) { value&.strip }
   normalizes :isbn, with: ->(value) { value&.strip&.delete("-") }
 
-  validates :title, presence: true
+  validates :title, presence: true, unless: :processing?
   validates :isbn,
             presence: true,
             uniqueness: { case_sensitive: false },

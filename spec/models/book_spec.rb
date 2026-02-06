@@ -6,16 +6,16 @@ RSpec.describe Book, type: :model do
   subject(:book) { build(:book) }
 
   describe "database schema" do
-    it { is_expected.to have_db_column(:title).of_type(:text).with_options(null: false) }
+    it { is_expected.to have_db_column(:title).of_type(:text).with_options(null: true) }
     it { is_expected.to have_db_column(:isbn).of_type(:string).with_options(null: false) }
     it { is_expected.to have_db_column(:status).of_type(:integer).with_options(null: false) }
     it { is_expected.to have_db_column(:author).of_type(:string) }
     it { is_expected.to have_db_column(:description).of_type(:text) }
     it { is_expected.to have_db_column(:cover_url).of_type(:string) }
 
-    it "defaults status to tsundoku" do
+    it "defaults status to processing" do
       book = described_class.new
-      expect(book.status).to eq("tsundoku")
+      expect(book.status).to eq("processing")
     end
 
     it { is_expected.to have_db_index(:isbn).unique(true) }
@@ -59,7 +59,7 @@ RSpec.describe Book, type: :model do
   describe "enums" do
     it do
       expect(book).to define_enum_for(:status)
-        .with_values(tsundoku: 0, reading: 1, finished: 2, abandoned: 3)
+        .with_values(processing: 0, tsundoku: 1, reading: 2, finished: 3, abandoned: 4)
     end
 
     it "allows switching status to reading via trait" do
@@ -72,6 +72,10 @@ RSpec.describe Book, type: :model do
 
     it "allows switching status to abandoned via trait" do
       expect(build(:book, :abandoned)).to be_abandoned
+    end
+
+    it "allows switching status to processing via trait" do
+      expect(build(:book, :processing)).to be_processing
     end
   end
 end

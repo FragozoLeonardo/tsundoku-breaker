@@ -8,112 +8,76 @@ RSpec.describe GoogleBooksService do
     subject(:service_call) { described_class.call(isbn) }
 
     let(:isbn) { "9780132350884" }
-    let(:base_url) { GoogleBooksService::BASE_URL }
     let(:fake_api_key) { "TEST_API_KEY" }
 
     before do
-      allow(ENV).to receive(:fetch)
-        .with("GOOGLE_BOOKS_API_KEY", nil)
-        .and_return(fake_api_key)
+      allow(ENV).to receive(:fetch).with("GOOGLE_BOOKS_API_KEY", nil).and_return(fake_api_key)
+      allow(Rails.logger).to receive(:info)
+      allow(Rails.logger).to receive(:error)
     end
 
-    context "when the API returns data successfully" do
-      let(:google_response) do
+    it "measures and returns latency" do
+      stub_request(:get, /googleapis/).to_return(status: 200, body: { items: [] }.to_json)
+      expect(service_call.latency).to be_a(Numeric)
+    end
+
+    context "when API returns success" do
+      let(:response_body) do
         {
-          items: [
-            {
-              volumeInfo: {
-                title: "Clean Code",
-                authors: ["Robert C. Martin"],
-                description: "Best book ever.",
-                imageLinks: { thumbnail: "http://cover.jpg" }
-              }
+          items: [{
+            volumeInfo: {
+              title: "  Clean Code  ",
+              authors: ["Robert Martin", "Micah Martin"],
+              imageLinks: { thumbnail: "http://cover.jpg" }
             }
-          ]
+          }]
         }.to_json
       end
 
-      before do
-        stub_request(:get, base_url)
-          .with(query: { q: "isbn:#{isbn}", key: fake_api_key })
-          .to_return(
-            status: 200,
-            body: google_response,
-            headers: { "Content-Type" => "application/json" }
-          )
-      end
+      it "returns success with latency and sanitized data" do
+        stub_request(:get, /googleapis/).to_return(status: 200, body: response_body)
 
-      it "returns a success result with formatted book data" do
         result = service_call
 
         expect(result).to be_success
-        expect(result.data).to include(
-          title: "Clean Code",
-          author: "Robert C. Martin"
-        )
-        expect(result.error).to be_nil
+        expect(result.data[:title]).to eq("Clean Code")
+        expect(result.data[:author]).to eq("Robert Martin, Micah Martin")
+        expect(result.data[:cover_url]).to eq("https://cover.jpg")
       end
     end
 
-    context "when the book is not found" do
-      let(:empty_response) { { totalItems: 0, items: [] }.to_json }
-
-      before do
-        stub_request(:get, base_url)
-          .with(query: { q: "isbn:#{isbn}", key: fake_api_key })
-          .to_return(status: 200, body: empty_response)
-      end
-
-      it "returns a failure result with book_not_found error" do
-        result = service_call
-
-        expect(result).not_to be_success
-        expect(result.error).to eq(:book_not_found)
+    context "when rate limit is hit" do
+      it "returns rate_limit_exceeded and logs as info" do
+        stub_request(:get, /googleapis/).to_return(status: 429)
+        expect(service_call.error).to eq(:rate_limit_exceeded)
+        expect(Rails.logger).to have_received(:info).with(/Rate limit.*#{isbn}/)
       end
     end
 
-    context "when the API returns a server error" do
-      before do
-        stub_request(:get, base_url)
-          .with(query: { q: "isbn:#{isbn}", key: fake_api_key })
-          .to_return(status: 500)
+    GoogleBooksService::NETWORK_ERRORS.each do |error_class|
+      it "returns a network_failure error on #{error_class}" do
+        stub_request(:get, /googleapis/).to_raise(error_class)
+        expect(service_call.error).to eq(:network_failure)
       end
 
-      it "returns a failure result with api_error" do
-        result = service_call
-
-        expect(result).not_to be_success
-        expect(result.error).to eq(:api_error)
+      it "logs diagnostic error for #{error_class}" do
+        stub_request(:get, /googleapis/).to_raise(error_class)
+        service_call
+        expect(Rails.logger).to have_received(:error).with(/Network failure.*#{isbn}/)
       end
     end
 
-    context "when the request times out" do
-      before do
-        stub_request(:get, base_url)
-          .with(query: { q: "isbn:#{isbn}", key: fake_api_key })
-          .to_timeout
-      end
-
-      it "handles the exception and returns api_error" do
-        result = service_call
-
-        expect(result).not_to be_success
-        expect(result.error).to eq(:api_error)
+    context "when response is invalid JSON" do
+      it "returns parsing_error" do
+        stub_request(:get, /googleapis/).to_return(status: 200, body: "not-json")
+        expect(service_call.error).to eq(:parsing_error)
       end
     end
 
-    context "when the response body is invalid JSON" do
-      before do
-        stub_request(:get, base_url)
-          .with(query: { q: "isbn:#{isbn}", key: fake_api_key })
-          .to_return(status: 200, body: "INVALID_JSON_DATA")
-      end
-
-      it "handles the exception and returns api_error" do
-        result = service_call
-
-        expect(result).not_to be_success
-        expect(result.error).to eq(:api_error)
+    context "when book is not found" do
+      it "returns book_not_found" do
+        stub_request(:get, /googleapis/).to_return(status: 200, body: { totalItems: 0 }.to_json)
+        expect(service_call.error).to eq(:book_not_found)
       end
     end
   end

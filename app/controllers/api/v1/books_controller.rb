@@ -3,17 +3,9 @@
 module Api
   module V1
     class BooksController < ApplicationController
-      rescue_from ActiveRecord::RecordNotFound do
-        render json: { error: "Book not found" }, status: :not_found
-      end
-
-      rescue_from ActionController::ParameterMissing do
-        render json: { error: "Parameter missing" }, status: :bad_request
-      end
-
-      rescue_from ArgumentError do |e|
-        render json: { error: e.message }, status: :unprocessable_content
-      end
+      rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
+      rescue_from ActionController::ParameterMissing, with: :render_bad_request
+      rescue_from ArgumentError, with: :render_unprocessable
 
       def index
         books = Book.order(created_at: :desc)
@@ -34,10 +26,7 @@ module Api
       def update
         book = Book.find(params[:id])
 
-        if book.processing?
-          return render json: { error: "Book is still being processed and cannot be updated" },
-                        status: :unprocessable_content
-        end
+        return render json: { error: "Book is still being processed" }, status: :conflict if book.processing?
 
         if book.update(update_params)
           render json: book
@@ -49,30 +38,23 @@ module Api
       private
 
       def create_params
-        params.expect(book: %i[isbn])
+        params.expect(book: [:isbn])
       end
 
       def update_params
         params.expect(book: %i[status title author description cover_url])
       end
 
-      def create_book_from(book_data, isbn)
-        book = Book.new(book_data.merge(isbn: isbn))
-
-        if book.save
-          render json: book, status: :created
-        else
-          render json: { errors: book.errors }, status: :unprocessable_content
-        end
+      def render_not_found
+        render json: { error: "Book not found" }, status: :not_found
       end
 
-      def handle_service_error(error_code)
-        case error_code
-        when :book_not_found
-          render json: { error: "Book not found" }, status: :not_found
-        else
-          render json: { error: "Service unavailable" }, status: :service_unavailable
-        end
+      def render_bad_request(exception)
+        render json: { error: exception.message }, status: :bad_request
+      end
+
+      def render_unprocessable(exception)
+        render json: { error: exception.message }, status: :unprocessable_content
       end
     end
   end

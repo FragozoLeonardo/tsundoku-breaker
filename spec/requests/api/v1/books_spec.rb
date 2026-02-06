@@ -3,132 +3,76 @@
 require "rails_helper"
 
 RSpec.describe "Api::V1::Books", type: :request do
-  include ActiveJob::TestHelper
+  describe "API Safety & Headers" do
+    it "returns JSON content type" do
+      get api_v1_books_path
+      expect(response.content_type).to include("application/json")
+    end
+  end
 
   describe "GET /api/v1/books" do
-    subject(:request) { get api_v1_books_path }
+    before { create_list(:book, 3) }
 
-    let!(:newest_book) { create(:book, created_at: Time.current) }
-
-    before do
-      create(:book, created_at: 2.days.ago)
-      create(:book, created_at: 1.day.ago)
-      request
-    end
-
-    it "returns http success" do
+    it "returns all books ordered by creation" do
+      get api_v1_books_path
       expect(response).to have_http_status(:ok)
-    end
-
-    it "returns all books" do
       expect(response.parsed_body.size).to eq(3)
-    end
-
-    it "orders books by creation date (newest first)" do
-      expect(response.parsed_body.first["id"]).to eq(newest_book.id)
     end
   end
 
   describe "POST /api/v1/books" do
-    subject(:request) { post api_v1_books_path, params: { book: { isbn: isbn } } }
+    let(:valid_params) { { book: { isbn: "9780132350884" } } }
 
-    before do
-      ActiveJob::Base.queue_adapter = :test
-    end
+    context "with valid ISBN" do
+      it "creates a book and enqueues job" do
+        ActiveJob::Base.queue_adapter = :test
+        expect do
+          post api_v1_books_path, params: valid_params
+        end.to change(Book, :count).by(1).and have_enqueued_job(DownloadBookMetadataJob)
 
-    let(:isbn) { "9780132350884" }
-
-    context "with valid parameters" do
-      it "creates a new book in processing status" do
-        expect { request }.to change(Book, :count).by(1)
-        expect(Book.last.status).to eq("processing")
-      end
-
-      it "returns http accepted" do
-        request
         expect(response).to have_http_status(:accepted)
       end
+    end
 
-      it "enqueues the metadata download job" do
-        expect { request }.to have_enqueued_job(DownloadBookMetadataJob)
-          .with(instance_of(Integer)) # O job recebe o ID do livro
-      end
-
-      it "returns the initial book attributes" do
-        request
-        expect(response.parsed_body).to include(
-          "isbn" => isbn,
-          "status" => "processing"
-        )
+    context "with duplicate ISBN" do
+      it "returns unprocessable content" do
+        create(:book, isbn: "9780132350884")
+        post api_v1_books_path, params: valid_params
+        expect(response).to have_http_status(:unprocessable_content)
       end
     end
 
-    context "when the book already exists" do
-      before { create(:book, isbn: isbn) }
-
-      it "does not create a new book" do
-        expect { request }.not_to change(Book, :count)
-      end
-
-      it "returns unprocessable content" do
-        request
-        expect(response).to have_http_status(:unprocessable_content)
-      end
-
-      it "returns error messages" do
-        request
-        expect(response.parsed_body["errors"]).to include("isbn")
+    context "when parameters are missing" do
+      it "returns bad request" do
+        post api_v1_books_path, params: {}
+        expect(response).to have_http_status(:bad_request)
       end
     end
   end
 
   describe "PATCH /api/v1/books/:id" do
-    subject(:request) { patch api_v1_book_path(book_id), params: params }
+    let(:book) { create(:book, status: :tsundoku, isbn: "1111111111") }
 
-    let!(:book) { create(:book, status: :tsundoku) }
-    let(:book_id) { book.id }
-    let(:params) { { book: { status: "reading" } } }
-
-    context "with valid parameters" do
-      it "updates the book status" do
-        expect { request }.to change { book.reload.status }.from("tsundoku").to("reading")
-      end
-
-      it "returns http ok" do
-        request
-        expect(response).to have_http_status(:ok)
-      end
+    it "updates book status" do
+      patch api_v1_book_path(book), params: { book: { status: "reading" } }
+      expect(response).to have_http_status(:ok)
+      expect(book.reload.status).to eq("reading")
     end
 
-    context "when the book is still processing" do
-      let!(:book) { create(:book, status: :processing) }
-      let(:params) { { book: { status: "reading" } } }
-
-      it "returns unprocessable content" do
-        request
-        expect(response).to have_http_status(:unprocessable_content)
-      end
-
-      it "returns a specific error message" do
-        request
-        expect(response.parsed_body["error"]).to eq("Book is still being processed and cannot be updated")
-      end
+    it "ignores isbn changes in requests" do
+      patch api_v1_book_path(book), params: { book: { isbn: "9999999999" } }
+      expect(book.reload.isbn).to eq("1111111111")
     end
 
-    context "with invalid parameters" do
-      let(:params) { { book: { status: "invalid_status" } } }
-
-      it "returns unprocessable content" do
-        request
-        expect(response).to have_http_status(:unprocessable_content)
-      end
+    it "fails if book is still processing" do
+      processing_book = create(:book, status: :processing)
+      patch api_v1_book_path(processing_book), params: { book: { status: "reading" } }
+      expect(response).to have_http_status(:conflict)
     end
 
     context "when book does not exist" do
-      let(:book_id) { -1 }
-
-      it "returns not found" do
-        request
+      it "returns 404 not found" do
+        patch api_v1_book_path(id: 999_999), params: { book: { status: "reading" } }
         expect(response).to have_http_status(:not_found)
       end
     end

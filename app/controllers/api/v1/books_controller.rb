@@ -9,7 +9,7 @@ module Api
 
       def index
         books = Book.order(created_at: :desc)
-        render json: books
+        render json: BookBlueprint.render(books)
       end
 
       def create
@@ -17,7 +17,7 @@ module Api
 
         if book.save
           DownloadBookMetadataJob.perform_later(book.id)
-          render json: book, status: :accepted
+          render json: BookBlueprint.render(book), status: :accepted
         else
           render json: { errors: book.errors }, status: :unprocessable_content
         end
@@ -29,7 +29,7 @@ module Api
         return render json: { error: "Book is still being processed" }, status: :conflict if book.processing?
 
         if book.update(update_params)
-          render json: book
+          render json: BookBlueprint.render(book)
         else
           render json: { errors: book.errors }, status: :unprocessable_content
         end
